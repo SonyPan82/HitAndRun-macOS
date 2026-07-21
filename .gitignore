@@ -1,0 +1,13 @@
+# Original game source & data (proprietary, not ours to distribute)
+upstream/
+
+# Build artifacts
+build/
+*.o
+*.a
+*.dylib
+
+# macOS
+.DS_Store
+
+
