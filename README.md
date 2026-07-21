@@ -1,4 +1,8 @@
-# The Simpsons: Hit & Run — Apple Silicon port
+<p align="center">
+  <img src="assets/icons/AppIcon-1024.png" width="128" height="128" alt="App icon">
+</p>
+
+# The Simpsons: Hit & Run - Apple Silicon port
 
 Native Apple-platform porting workspace for the PC release of *The Simpsons: Hit & Run*.
 The project is written around the original C++ game code and game data: it does **not**
