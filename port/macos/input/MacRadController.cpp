@@ -173,14 +173,21 @@ public:
         keys[0x39] = state.actions[MAC_ACTION_JUMP];       // Space
         keys[0x2a] = state.actions[MAC_ACTION_SPRINT];     // Shift
         keys[0x1c] = state.actions[MAC_ACTION_CONFIRM];    // Return
-        keys[0x01] = state.actions[MAC_ACTION_CANCEL] || state.actions[MAC_ACTION_PAUSE]; // Escape
+        // Escape remains the front-end Back key.  Pause gets its own scan
+        // code and is also mapped to InputManager::Start below, so Esc and P
+        // both open the in-game pause screen without conflating press edges.
+        keys[0x01] = state.actions[MAC_ACTION_CANCEL]; // Escape
+        keys[0x19] = state.actions[MAC_ACTION_PAUSE];  // P
         keys[0xc8] = state.actions[MAC_ACTION_MENU_UP];
         keys[0xd0] = state.actions[MAC_ACTION_MENU_DOWN];
         keys[0xcb] = state.actions[MAC_ACTION_MENU_LEFT];
         keys[0xcd] = state.actions[MAC_ACTION_MENU_RIGHT];
         for (int key = 0; key < 256; ++key) mKeyboard->Point(key)->SetRange(0.0f, 1.0f), mKeyboard->Point(key)->SetValue(keys[key] ? 1.0f : 0.0f);
         mMouse->Point(0)->SetValue(state.trackpadDeltaX); mMouse->Point(1)->SetValue(state.trackpadDeltaY); mMouse->Point(2)->SetValue(0.0f);
-        mMouse->Point(3)->SetRange(0.0f, 1.0f); mMouse->Point(3)->SetValue(state.trackpadButtons[0] ? 1.0f : 0.0f);
+        // The original PC mapping uses Mouse Button 0 for both DoAction and
+        // GetOutCar.  Give Mac users a keyboard equivalent (E) and map the
+        // pad's X/Square/Y action through this exact same input point.
+        mMouse->Point(3)->SetRange(0.0f, 1.0f); mMouse->Point(3)->SetValue((state.trackpadButtons[0] || state.actions[MAC_ACTION_ACTION]) ? 1.0f : 0.0f);
         mMouse->Point(4)->SetRange(0.0f, 1.0f); mMouse->Point(4)->SetValue(state.trackpadButtons[1] ? 1.0f : 0.0f);
         const float values[] = {
             state.steering, state.gamepadMoveY, state.cameraX,

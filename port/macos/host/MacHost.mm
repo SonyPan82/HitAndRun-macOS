@@ -2,6 +2,7 @@
 #import <OpenGL/gl.h>
 
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
 
 #include "MacInput.h"
@@ -26,6 +27,7 @@ static MacGameAction ActionForKey(unsigned short keyCode, bool* known)
     if (keyCode == profile.keys[static_cast<unsigned>(MacBindableAction::MoveLeft)]) return MAC_ACTION_STEER_LEFT;
     if (keyCode == profile.keys[static_cast<unsigned>(MacBindableAction::MoveRight)]) return MAC_ACTION_STEER_RIGHT;
     if (keyCode == profile.keys[static_cast<unsigned>(MacBindableAction::Jump)]) return MAC_ACTION_JUMP;
+    if (keyCode == profile.keys[static_cast<unsigned>(MacBindableAction::Action)]) return MAC_ACTION_ACTION;
     if (keyCode == profile.keys[static_cast<unsigned>(MacBindableAction::Sprint)]) return MAC_ACTION_SPRINT;
     if (keyCode == profile.keys[static_cast<unsigned>(MacBindableAction::Confirm)]) return MAC_ACTION_CONFIRM;
     if (keyCode == profile.keys[static_cast<unsigned>(MacBindableAction::Back)]) return MAC_ACTION_CANCEL;
@@ -38,6 +40,7 @@ static MacGameAction ActionForKey(unsigned short keyCode, bool* known)
         case 0:  return MAC_ACTION_STEER_LEFT;  // A
         case 2:  return MAC_ACTION_STEER_RIGHT; // D
         case 49: return MAC_ACTION_JUMP;        // Space
+        case 14: return MAC_ACTION_ACTION;      // E (interact / enter / exit vehicle)
         case 56: return MAC_ACTION_SPRINT;      // Left Shift
         case 36: return MAC_ACTION_CONFIRM;     // Return
         case 53: return MAC_ACTION_CANCEL;      // Escape
@@ -74,6 +77,7 @@ static MacGameAction ActionForEvent(NSEvent* event, bool* known)
         case 'a':
         case 'q': return MAC_ACTION_STEER_LEFT;
         case 'd': return MAC_ACTION_STEER_RIGHT;
+        case 'e': return MAC_ACTION_ACTION;
         case ' ': return MAC_ACTION_JUMP;
         default:
             *known = false;
@@ -315,8 +319,28 @@ static NSSize SizeForResolutionIndex(int resolution)
     [[self openGLContext] update];
     if (_p3dContext != nullptr && _p3dContext->GetDisplay() != nullptr)
     {
-        const NSRect pixels = [self convertRectToBacking:self.bounds];
-        _p3dContext->GetDisplay()->InitDisplay(static_cast<int>(pixels.size.width), static_cast<int>(pixels.size.height), 32);
+        // wantsBestResolutionOpenGLSurface is NO (see initWithFrame:input:),
+        // so the actual GL drawable is sized in points, not backing pixels.
+        // convertRectToBacking: reports the screen's Retina backing scale
+        // regardless of that per-surface override, so on a Retina display it
+        // told the game the framebuffer was 2x larger than what was actually
+        // being rendered into. The game then placed corner-anchored HUD
+        // elements (mini-map, tutorial prompts) using that inflated canvas
+        // size, landing them outside -- or only partially inside -- the real
+        // viewport, which is what produced the corrupted-looking patches.
+        const NSSize points = self.bounds.size;
+        _p3dContext->GetDisplay()->InitDisplay(static_cast<int>(points.width), static_cast<int>(points.height), 32);
+        if (std::getenv("HMR_INPUT_TRACE") != nullptr)
+        {
+            const NSRect backing = [self convertRectToBacking:self.bounds];
+            GLint viewport[4] = {0, 0, 0, 0};
+            glGetIntegerv(GL_VIEWPORT, viewport);
+            rReleasePrintf("macOS reshape: points=%dx%d backing=%dx%d scaleFactor=%.2f glViewport=%d,%d,%d,%d\n",
+                            static_cast<int>(points.width), static_cast<int>(points.height),
+                            static_cast<int>(backing.size.width), static_cast<int>(backing.size.height),
+                            self.window != nil ? self.window.backingScaleFactor : -1.0,
+                            viewport[0], viewport[1], viewport[2], viewport[3]);
+        }
     }
 }
 

@@ -4,12 +4,12 @@
 
 // Native, layout-independent default bindings.  Values are macOS hardware
 // key codes and are persisted separately from the legacy PC configuration.
-enum class MacBindableAction : unsigned char { MoveUp, MoveDown, MoveLeft, MoveRight, Jump, Sprint, Confirm, Back, Pause, Count };
+enum class MacBindableAction : unsigned char { MoveUp, MoveDown, MoveLeft, MoveRight, Jump, Action, Sprint, Confirm, Back, Pause, Count };
 
 struct MacControlProfile
 {
     std::array<unsigned short, static_cast<unsigned>(MacBindableAction::Count)> keys =
-        { 13, 1, 0, 2, 49, 56, 36, 53, 35 }; // WASD, Space, Shift, Return, Esc, P
+        { 13, 1, 0, 2, 49, 14, 56, 36, 53, 35 }; // WASD, Space, E, Shift, Return, Esc, P
     float trackpadSensitivity = 1.0f;
     bool invertTrackpadY = false;
 };

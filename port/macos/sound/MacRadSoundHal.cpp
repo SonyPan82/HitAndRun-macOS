@@ -224,6 +224,13 @@ private:
         const unsigned frames = buffer->mAudioDataBytesCapacity / (sizeof(float) * kOutputChannels);
         std::memset(samples, 0, frames * sizeof(float) * kOutputChannels);
         { std::lock_guard<std::mutex> lock(self->mMutex); for (MacVoice* voice : self->mVoices) voice->Mix(samples, frames); }
+        // AudioQueue accepts floating point samples but does not protect us
+        // from the old mixer summing many simultaneous effects beyond the
+        // valid [-1, 1] range.  That overflow manifests as a constant harsh
+        // crackle on modern macOS output devices.  Soft-limit once per mixed
+        // sample, preserving normal volume while preventing digital clipping.
+        for (unsigned sample = 0; sample < frames * kOutputChannels; ++sample)
+            samples[sample] = std::clamp(samples[sample], -1.0f, 1.0f);
         buffer->mAudioDataByteSize = frames * sizeof(float) * kOutputChannels;
         AudioQueueEnqueueBuffer(queue, buffer, 0, nullptr);
     }
