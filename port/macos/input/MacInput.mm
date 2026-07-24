@@ -226,8 +226,9 @@ void MacInputUpdate(MacInputManager* manager, MacInputState* state)
         state->gamepadButtons[3] |= Pressed(pad.buttonY);
         state->gamepadButtons[4] |= Pressed(pad.leftShoulder);
         state->gamepadButtons[5] |= Pressed(pad.rightShoulder);
-        state->gamepadButtons[6] |= TriggerPressed(pad.leftTrigger.value);
-        state->gamepadButtons[7] |= TriggerPressed(pad.rightTrigger.value);
+        // Triggers are sent via the W/S keyboard bridge above.  Do not expose
+        // them as legacy gamepad Button6/7 as the original PC defaults bind
+        // those same buttons to camera zoom/look-up as well as driving.
         state->gamepadButtons[8] |= Pressed(pad.buttonMenu);
         // The game UI receives the d-pad through the explicit keyboard-arrow
         // bridge above.  Leaving the legacy POV neutral prevents the same

@@ -197,6 +197,15 @@ public:
         keys[0xd0] = state.actions[MAC_ACTION_MENU_DOWN];
         keys[0xcb] = state.actions[MAC_ACTION_MENU_LEFT];
         keys[0xcd] = state.actions[MAC_ACTION_MENU_RIGHT];
+        // The original gamepad camera axes are stateful in this 2003 PC
+        // input path and can remain active after a stick release. Convert the
+        // right stick into the game's proven keyboard camera bindings, whose
+        // press/release edges are exact.
+        constexpr float cameraKeyThreshold = 0.35f;
+        keys[0x4b] = state.cameraX <= -cameraKeyThreshold; // NumPad 4
+        keys[0x4d] = state.cameraX >=  cameraKeyThreshold; // NumPad 6
+        keys[0x48] = state.cameraY >=  cameraKeyThreshold; // NumPad 8
+        keys[0x50] = state.cameraY <= -cameraKeyThreshold; // NumPad 2
         for (int key = 0; key < 256; ++key) mKeyboard->Point(key)->SetRange(0.0f, 1.0f), mKeyboard->Point(key)->SetValue(keys[key] ? 1.0f : 0.0f);
         mMouse->Point(0)->SetValue(state.trackpadDeltaX); mMouse->Point(1)->SetValue(state.trackpadDeltaY); mMouse->Point(2)->SetValue(0.0f);
         // The original PC mapping uses Mouse Button 0 for both DoAction and
@@ -207,8 +216,8 @@ public:
         const float values[] = {
             // Left-stick movement is delivered through the keyboard bridge,
             // never as continuous legacy X/Y axes. This prevents menu drift.
-            0.0f, 0.0f, state.cameraX,
-            0.0f, 0.0f, state.cameraY,
+            0.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 0.0f,
             // Xbox triggers are deliberately digital Button6/7 below.  Do
             // not also leak their resting analogue values into Slider0/1:
             // saved legacy mappings can otherwise see them as held inputs.
