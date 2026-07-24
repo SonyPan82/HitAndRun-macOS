@@ -11,6 +11,7 @@
 #include "MacInput.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 struct MacInputManager
@@ -26,17 +27,31 @@ struct MacInputManager
 
 static MacInputManager* gSharedInput = nullptr;
 
-static float ClampAxis(float value)
+static float ClampAxis(float value, float deadZone)
 {
-    constexpr float deadZone = 0.12f;
-    if (value > -deadZone && value < deadZone)
+    value = std::clamp(value, -1.0f, 1.0f);
+    const float magnitude = std::abs(value);
+    if (magnitude <= deadZone)
         return 0.0f;
-    return std::clamp(value, -1.0f, 1.0f);
+
+    // Rescale the remaining range so the camera does not jump when the stick
+    // leaves its neutral zone.  A larger zone is deliberately used for the
+    // right stick: small residual values are very noticeable as a camera that
+    // keeps rotating after the player releases it.
+    return std::copysign((magnitude - deadZone) / (1.0f - deadZone), value);
 }
 
 static bool Pressed(GCControllerButtonInput* button)
 {
     return button != nil && button.isPressed;
+}
+
+static bool TriggerPressed(float value)
+{
+    // Bluetooth Xbox pads can report a small non-zero trigger value at rest.
+    // The PC game expects triggers as digital buttons, so accepting a value
+    // as low as 0.05 made a released trigger look permanently pressed.
+    return value >= 0.20f;
 }
 
 static float PovFromDirection(float x, float y)
@@ -136,19 +151,49 @@ void MacInputUpdate(MacInputManager* manager, MacInputState* state)
         if (pad == nil)
             continue;
 
+#if defined(RAD_MACOS)
+        // Temporary native-controller diagnostic. This is intentionally the
+        // unfiltered GameController state, so an idle controller that still
+        // drives menus can be diagnosed from the launch log rather than by
+        // guessing at another dead-zone value.
+        static unsigned int diagnosticFrame = 0;
+        if ((++diagnosticFrame % 120u) == 0u)
+        {
+            NSLog(@"[mac-input] LX=%+.3f LY=%+.3f RX=%+.3f RY=%+.3f LT=%.3f RT=%.3f D=(%d,%d,%d,%d) A=%d B=%d X=%d Y=%d",
+                  pad.leftThumbstick.xAxis.value, pad.leftThumbstick.yAxis.value,
+                  pad.rightThumbstick.xAxis.value, pad.rightThumbstick.yAxis.value,
+                  pad.leftTrigger.value, pad.rightTrigger.value,
+                  Pressed(pad.dpad.up), Pressed(pad.dpad.down), Pressed(pad.dpad.left), Pressed(pad.dpad.right),
+                  Pressed(pad.buttonA), Pressed(pad.buttonB), Pressed(pad.buttonX), Pressed(pad.buttonY));
+        }
+#endif
+
         ++state->connectedControllerCount;
         // GameController normalises the physical layouts of Xbox, PlayStation
         // and Switch Pro pads into these logical controls.
-        const float steering = ClampAxis(pad.leftThumbstick.xAxis.value);
-        if (std::abs(steering) > std::abs(state->steering)) state->steering = steering;
-        const float moveY = ClampAxis(pad.leftThumbstick.yAxis.value);
-        if (std::abs(moveY) > std::abs(state->gamepadMoveY)) state->gamepadMoveY = moveY;
-        state->throttle = std::max(state->throttle, pad.rightTrigger.value);
-        state->brake = std::max(state->brake, pad.leftTrigger.value);
-        state->cameraX = ClampAxis(pad.rightThumbstick.xAxis.value);
-        state->cameraY = ClampAxis(pad.rightThumbstick.yAxis.value);
-        state->actions[MAC_ACTION_ACCELERATE] |= pad.rightTrigger.value > 0.05f;
-        state->actions[MAC_ACTION_BRAKE] |= pad.leftTrigger.value > 0.05f;
+        // Retain a deliberately conservative neutral zone.  This old engine
+        // treats even a minute non-zero axis value as a held menu direction.
+        const float steering = ClampAxis(pad.leftThumbstick.xAxis.value, 0.30f);
+        const float moveY = ClampAxis(pad.leftThumbstick.yAxis.value, 0.30f);
+        // The PC input layer rebroadcasts a non-zero analogue axis every
+        // frame, including through front-end menus. On modern Bluetooth
+        // controllers this turns residual values into endless navigation.
+        // Feed the left stick through the reliable digital W/S/A/D bridge.
+        constexpr float stickButtonThreshold = 0.45f;
+        state->actions[MAC_ACTION_STEER_LEFT] |= steering <= -stickButtonThreshold;
+        state->actions[MAC_ACTION_STEER_RIGHT] |= steering >= stickButtonThreshold;
+        state->actions[MAC_ACTION_ACCELERATE] |= moveY >= stickButtonThreshold;
+        state->actions[MAC_ACTION_BRAKE] |= moveY <= -stickButtonThreshold;
+        const float throttle = TriggerPressed(pad.rightTrigger.value) ? pad.rightTrigger.value : 0.0f;
+        const float brake = TriggerPressed(pad.leftTrigger.value) ? pad.leftTrigger.value : 0.0f;
+        state->throttle = std::max(state->throttle, throttle);
+        state->brake = std::max(state->brake, brake);
+        const float cameraX = ClampAxis(pad.rightThumbstick.xAxis.value, 0.24f);
+        const float cameraY = ClampAxis(pad.rightThumbstick.yAxis.value, 0.24f);
+        if (std::abs(cameraX) > std::abs(state->cameraX)) state->cameraX = cameraX;
+        if (std::abs(cameraY) > std::abs(state->cameraY)) state->cameraY = cameraY;
+        state->actions[MAC_ACTION_ACCELERATE] |= TriggerPressed(pad.rightTrigger.value);
+        state->actions[MAC_ACTION_BRAKE] |= TriggerPressed(pad.leftTrigger.value);
         state->actions[MAC_ACTION_STEER_LEFT] |= pad.leftThumbstick.xAxis.value < -0.35f;
         state->actions[MAC_ACTION_STEER_RIGHT] |= pad.leftThumbstick.xAxis.value > 0.35f;
         state->actions[MAC_ACTION_CONFIRM] |= Pressed(pad.buttonA);
@@ -157,10 +202,13 @@ void MacInputUpdate(MacInputManager* manager, MacInputState* state)
         state->actions[MAC_ACTION_JUMP] |= Pressed(pad.buttonY);
         state->actions[MAC_ACTION_PAUSE] |= Pressed(pad.buttonMenu);
         state->actions[MAC_ACTION_SPRINT] |= Pressed(pad.rightShoulder);
-        state->actions[MAC_ACTION_MENU_UP] |= pad.dpad.yAxis.value > 0.35f;
-        state->actions[MAC_ACTION_MENU_DOWN] |= pad.dpad.yAxis.value < -0.35f;
-        state->actions[MAC_ACTION_MENU_LEFT] |= pad.dpad.xAxis.value < -0.35f;
-        state->actions[MAC_ACTION_MENU_RIGHT] |= pad.dpad.xAxis.value > 0.35f;
+        // Do not infer digital directions from analogue d-pad axes.  A few
+        // Xbox Bluetooth firmwares leave a small axis value after release,
+        // which the 2003 UI repeatedly interprets as a held selection key.
+        state->actions[MAC_ACTION_MENU_UP] |= Pressed(pad.dpad.up);
+        state->actions[MAC_ACTION_MENU_DOWN] |= Pressed(pad.dpad.down);
+        state->actions[MAC_ACTION_MENU_LEFT] |= Pressed(pad.dpad.left);
+        state->actions[MAC_ACTION_MENU_RIGHT] |= Pressed(pad.dpad.right);
 
         state->gamepadButtons[0] |= Pressed(pad.buttonA);
         state->gamepadButtons[1] |= Pressed(pad.buttonB);
@@ -168,10 +216,11 @@ void MacInputUpdate(MacInputManager* manager, MacInputState* state)
         state->gamepadButtons[3] |= Pressed(pad.buttonY);
         state->gamepadButtons[4] |= Pressed(pad.leftShoulder);
         state->gamepadButtons[5] |= Pressed(pad.rightShoulder);
-        state->gamepadButtons[6] |= pad.leftTrigger.value > 0.05f;
-        state->gamepadButtons[7] |= pad.rightTrigger.value > 0.05f;
+        state->gamepadButtons[6] |= TriggerPressed(pad.leftTrigger.value);
+        state->gamepadButtons[7] |= TriggerPressed(pad.rightTrigger.value);
         state->gamepadButtons[8] |= Pressed(pad.buttonMenu);
-        const float pov = PovFromDirection(pad.dpad.xAxis.value, pad.dpad.yAxis.value);
-        if (pov < 1.0f) state->gamepadPov0 = pov;
+        // The game UI receives the d-pad through the explicit keyboard-arrow
+        // bridge above.  Leaving the legacy POV neutral prevents the same
+        // press being dispatched a second time through DirectInput.
     }
 }

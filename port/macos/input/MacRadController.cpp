@@ -49,7 +49,18 @@ public:
         // dead-zone: treating it as one swallowed every 0 -> 1 key press.
         // Buttons must therefore report each binary edge exactly, while axes
         // retain the requested noise tolerance.
-        if (mType == "Button" ? value == mValue : std::abs(value - mValue) <= mTolerance) return;
+        if (mType == "Button")
+        {
+            if (value == mValue) return;
+        }
+        // Axis tolerances are intended to suppress tiny fluctuations, but a
+        // neutral value must always be delivered.  Otherwise an axis that had
+        // moved past its tolerance could remain latched at its old value when
+        // the stick is released, producing an endlessly rotating camera.
+        else if (value == mValue || (value != 0.0f && std::abs(value - mValue) <= mTolerance))
+        {
+            return;
+        }
         mValue = value;
         for (const Callback& item : mCallbacks) item.callback->OnControllerInputPointChange(item.userData, value);
     }
@@ -194,9 +205,14 @@ public:
         mMouse->Point(3)->SetRange(0.0f, 1.0f); mMouse->Point(3)->SetValue((state.trackpadButtons[0] || state.actions[MAC_ACTION_ACTION]) ? 1.0f : 0.0f);
         mMouse->Point(4)->SetRange(0.0f, 1.0f); mMouse->Point(4)->SetValue(state.trackpadButtons[1] ? 1.0f : 0.0f);
         const float values[] = {
-            state.steering, state.gamepadMoveY, state.cameraX,
+            // Left-stick movement is delivered through the keyboard bridge,
+            // never as continuous legacy X/Y axes. This prevents menu drift.
+            0.0f, 0.0f, state.cameraX,
             0.0f, 0.0f, state.cameraY,
-            state.throttle, state.brake, state.gamepadPov0, 1.0f
+            // Xbox triggers are deliberately digital Button6/7 below.  Do
+            // not also leak their resting analogue values into Slider0/1:
+            // saved legacy mappings can otherwise see them as held inputs.
+            0.0f, 0.0f, 1.0f, 1.0f
         };
         for (unsigned int index = 0; index < 10; ++index) { mGamepad->Point(index)->SetValue(values[index]); mWheel->Point(index)->SetValue(values[index]); }
         for (unsigned int button = 0; button < 32; ++button)
