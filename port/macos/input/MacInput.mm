@@ -157,6 +157,16 @@ void MacInputUpdate(MacInputManager* manager, MacInputState* state)
         // drives menus can be diagnosed from the launch log rather than by
         // guessing at another dead-zone value.
         static unsigned int diagnosticFrame = 0;
+        static float previousCameraX = 0.0f;
+        static float previousCameraY = 0.0f;
+        const float rawCameraX = pad.rightThumbstick.xAxis.value;
+        const float rawCameraY = pad.rightThumbstick.yAxis.value;
+        if (std::abs(rawCameraX - previousCameraX) > 0.001f || std::abs(rawCameraY - previousCameraY) > 0.001f)
+        {
+            NSLog(@"[mac-camera] RX=%+.3f RY=%+.3f", rawCameraX, rawCameraY);
+            previousCameraX = rawCameraX;
+            previousCameraY = rawCameraY;
+        }
         if ((++diagnosticFrame % 120u) == 0u)
         {
             NSLog(@"[mac-input] LX=%+.3f LY=%+.3f RX=%+.3f RY=%+.3f LT=%.3f RT=%.3f D=(%d,%d,%d,%d) A=%d B=%d X=%d Y=%d",
