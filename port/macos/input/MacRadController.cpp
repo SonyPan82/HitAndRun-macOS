@@ -171,6 +171,10 @@ public:
         keys[0x1e] = state.actions[MAC_ACTION_STEER_LEFT]; // A
         keys[0x20] = state.actions[MAC_ACTION_STEER_RIGHT];// D
         keys[0x39] = state.actions[MAC_ACTION_JUMP];       // Space
+        // Some PC action maps use the keyboard binding for GetOutCar while
+        // others use Mouse Button 0 for entering/interacting.  Feed both
+        // routes from E so a vehicle can always be exited.
+        keys[0x12] = state.actions[MAC_ACTION_ACTION];     // E
         keys[0x2a] = state.actions[MAC_ACTION_SPRINT];     // Shift
         keys[0x1c] = state.actions[MAC_ACTION_CONFIRM];    // Return
         // Escape remains the front-end Back key.  Pause gets its own scan
